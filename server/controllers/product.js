@@ -1,3 +1,4 @@
+const { response } = require('express')
 const Product = require('../models/product')
 const asyncHandleer = require('express-async-handler')
 const slugify = require('slugify')
@@ -22,12 +23,42 @@ const getProduct = asyncHandleer(async(req, res) => {
     })
 })
 
+//Filtering, sorting & pagination
 const getProducts = asyncHandleer(async(req, res) => {
-    const products = await Product.find() 
-    return res.status(200).json({
-        success: products ? true : false,
-        productData: products ? products : 'Cannot get product'
+    const queries = {...req.query}
+    // Tach cac truong dac biet ra khoi query
+    const excludeFields = ['limit', 'sort', 'page', 'fields']
+    excludeFields.forEach(el => delete queries[el])
+    //format lai cac operators cho dung cu phap cua mongoose
+    let queryString = JSON.stringify(queries)
+    queryString = queryString.replace(/\b(gte|gt|lt|lte)\b/g, macthedEl => `$${macthedEl}`)
+    const formatedQueries = JSON.parse(queryString)
+    //Filtering
+    if(queries?.title) formatedQueries.title = {$regex: queries.title, $options: 'i'}
+    let queryCommand = Product.find(formatedQueries)
+
+    //sorting
+    if(req.query.sort) {
+        const sortBy = req.query.sort.split(',').join(' ')
+        queryCommand = queryCommand.sort(sortBy)
+    }
+
+    //Fields
+    //pagination
+
+    //execute query
+    //so luong san pham thoa man dieu kien khac so luong san pham tra ve 1 lan goi API
+    queryCommand.exec(async(err, response) =>{
+        if(err) throw new Error(err.message)
+        const counts = await Product.find(formatedQueries).countDocuments()
+        return res.status(200).json({
+            success: response ? true : false,
+            products: response ? response : 'Cannot get products',
+            counts
+        })
+        
     })
+   
 })
 
 const updateProduct = asyncHandleer(async(req, res) => {
